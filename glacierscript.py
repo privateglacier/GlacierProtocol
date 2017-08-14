@@ -30,10 +30,12 @@ import os
 import sys
 import hashlib
 from hashlib import sha256, md5
+import scrypt
 import random
 import subprocess
 import json
 from decimal import Decimal
+import binascii
 
 # Taken from Gavin Andresen's "bitcointools" python library (exact link in source file)
 from base58 import b58encode
@@ -82,6 +84,12 @@ def btc_to_satoshi(btc):
     value = btc * 100000000
     return int(value)
 
+# Returns hex
+def strongpkdf(s, passphrase):
+  salt = s+passphrase
+  # Required memory: N*r*p = 2**20 * 80 * 32 = 2.5G
+  dk = scrypt.hash(s, salt, 2**20, 80, 1, 32)
+  return binascii.hexlify(dk)
 
 ################################################################################################
 #
@@ -548,7 +556,7 @@ def entropy(n, length):
 #
 ################################################################################################
 
-def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
+def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphrase=""):
     """
     Generate data for a new cold storage address (private keys, address, redemption script)
     m: <int> number of multisig keys required for withdrawal
@@ -564,6 +572,7 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
     print "Creating {0}-of-{1} cold storage address.\n".format(m, n)
 
     keys = []
+    orig_keys = []
 
     while len(keys) < n:
         index = len(keys) + 1
@@ -579,6 +588,10 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
         hex_private_key = xor_hex_strings(dice_seed_hash, rng_seed_hash)
         WIF_private_key = hex_private_key_to_WIF_private_key(hex_private_key)
 
+        orig_keys.append(WIF_private_key)
+        transformed_WIF_private_key = WIF_private_key
+        if passphrase:
+	  transformed_WIF_private_key = hex_private_key_to_WIF_private_key(strongpkdf(WIF_private_key, passphrase))
         keys.append(WIF_private_key)
 
     print "Private keys created."
@@ -594,8 +607,11 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
         "bitcoin-cli createmultisig {0}".format(argstring), shell=True)
     results = json.loads(results)
 
-    print "Private keys:"
-    for idx, key in enumerate(keys):
+    if passphrase:
+      print "Private keys before transformation with passphrase " + passphrase
+    else:
+      print "Private keys:"
+    for idx, key in enumerate(orig_keys):
         print "Key #{0}: {1}".format(idx + 1, key)
 
     print "\nCold storage address:"
@@ -603,7 +619,18 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
 
     print "\nRedemption script:"
     print "{}".format(results["redeemScript"])
+
+    print "Create entropy for redeem key splitting"
+    dice_seed_string = read_dice_seed_interactive(dice_seed_length)
+
+    redeem_hex_random = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', dice_seed_string, results["redeemScript"], 10000, len(results["redeemScript"])*m))
+
+    ssss_results = subprocess.check_output(
+	"echo '{2}' | ./ssss/ssss-split -t {0} -n {1} -x -r {2}".format(m, n, results["redeemScript"], redeem_hex_random), shell=True)
+    print "\nSSSS of Redemption script:"
+    print "{}".format(ssss_results)
     print ""
+    
 
     write_and_verify_qr_code("cold storage address", "address.png", results["address"])
     write_and_verify_qr_code("redemption script", "redemption.png",
@@ -616,7 +643,7 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20):
 #
 ################################################################################################
 
-def withdraw_interactive():
+def withdraw_interactive(passphrase=""):
     """
     Construct and sign a transaction to withdaw funds from cold storage
     All data required for transaction construction is input at the terminal
@@ -680,6 +707,8 @@ def withdraw_interactive():
         keys = []
         while len(keys) < key_count:
             key = raw_input("Key #{0}: ".format(len(keys) + 1))
+	    if passphrase:
+	      key = hex_private_key_to_WIF_private_key(strongpkdf256(key, passphrase))
             keys.append(key)
 
         ###### fees, amount, and change #######
@@ -771,6 +800,7 @@ def withdraw_interactive():
 #
 ################################################################################################
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('program', choices=[
@@ -786,13 +816,15 @@ if __name__ == "__main__":
         "-m", type=int, help="Number of signing keys required in an m-of-n multisig address creation (default m-of-n = 1-of-2)", default=1)
     parser.add_argument(
         "-n", type=int, help="Number of total keys required in an m-of-n multisig address creation (default m-of-n = 1-of-2)", default=2)
+    parser.add_argument(
+        "-p", "--passphrase", type=str, help="Passphrase", default="")
     args = parser.parse_args()
 
     if args.program == "entropy":
         entropy(args.num_keys, args.rng)
 
     if args.program == "create-deposit-data":
-        deposit_interactive(args.m, args.n, args.dice, args.rng)
+        deposit_interactive(args.m, args.n, args.dice, args.rng, args.passphrase)
 
     if args.program == "create-withdrawal-data":
-        withdraw_interactive()
+        withdraw_interactive(args.passphrase)
