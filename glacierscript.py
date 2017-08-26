@@ -87,8 +87,8 @@ def btc_to_satoshi(btc):
 # Returns hex
 def strongpkdf(s, passphrase):
   salt = s+passphrase
-  # Required memory: N*r*p = 2**20 * 80 * 32 = 2.5G
-  dk = scrypt.hash(s, salt, 2**20, 80, 1, 32)
+  # Scrypt parameters are set on a machine with 2GB RAM.
+  dk = scrypt.hash(s, salt, 2**17, 100, 1, 32)
   return binascii.hexlify(dk)
 
 ################################################################################################
@@ -592,7 +592,7 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphras
         transformed_WIF_private_key = WIF_private_key
         if passphrase:
 	  transformed_WIF_private_key = hex_private_key_to_WIF_private_key(strongpkdf(WIF_private_key, passphrase))
-        keys.append(WIF_private_key)
+        keys.append(transformed_WIF_private_key)
 
     print "Private keys created."
     print "Generating {0}-of-{1} cold storage address...\n".format(m, n)
@@ -618,18 +618,24 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphras
     print "{}".format(results["address"])
 
     print "\nRedemption script:"
-    print "{}".format(results["redeemScript"])
+    redeemScript = results["redeemScript"]
+    print "{}".format(redeemScript)
 
     print "Create entropy for redeem key splitting"
     dice_seed_string = read_dice_seed_interactive(dice_seed_length)
 
-    redeem_hex_random = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', dice_seed_string, results["redeemScript"], 10000, len(results["redeemScript"])*m))
 
-    ssss_results = subprocess.check_output(
-	"echo '{2}' | ./ssss/ssss-split -t {0} -n {1} -x -r {2}".format(m, n, results["redeemScript"], redeem_hex_random), shell=True)
-    print "\nSSSS of Redemption script:"
-    print "{}".format(ssss_results)
-    print ""
+    redeem_hex_random = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', dice_seed_string, redeemScript, 10000, len(redeemScript)*m))
+    # Split to 1024 bit parts
+    for i in xrange((len(redeemScript)+255)/256):
+      redeem_hex_random_local = redeem_hex_random[(i*256*m) : ((i+1)*256*m)]
+      redeem_script_local = redeemScript[i*256 : ((i+1)*256)]
+      print "Redemption script piece {}: {}".format(i, redeem_script_local)
+      ssss_results = subprocess.check_output(
+	"echo '{2}' | ./ssss/ssss-split -t {0} -n {1} -x -r {3} -w part{4}".format(
+          m, n, redeem_script_local, redeem_hex_random_local, i), shell=True)
+      print "\nSSSS of Redemption script part {}:".format(i)
+      print "{}\n".format(ssss_results)
     
 
     write_and_verify_qr_code("cold storage address", "address.png", results["address"])
