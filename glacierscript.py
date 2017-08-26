@@ -20,6 +20,7 @@
 # - Bitcoin Core (http://bitcoincore.org)
 # - qrencode (QR code writer: http://packages.ubuntu.com/xenial/qrencode)
 # - zbarimg (QR code reader: http://packages.ubuntu.com/xenial/zbar-tools)
+# - python-scrypt (Scrypt hash function: http://packages.ubuntu.com/xenial/python-scrypt)
 #
 ################################################################################################
 
