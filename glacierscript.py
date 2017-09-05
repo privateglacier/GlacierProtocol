@@ -715,7 +715,7 @@ def withdraw_interactive(passphrase=""):
         while len(keys) < key_count:
             key = raw_input("Key #{0}: ".format(len(keys) + 1))
 	    if passphrase:
-	      key = hex_private_key_to_WIF_private_key(strongpkdf256(key, passphrase))
+	      key = hex_private_key_to_WIF_private_key(strongpkdf(key, passphrase))
             keys.append(key)
 
         ###### fees, amount, and change #######
