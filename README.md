@@ -15,5 +15,7 @@ If passphrase is given, the generated original private key generated WIF string 
 
 For increased security of the passphrase, it's important not to store the passphrase with the original private keys.
 
+To use this scrypt, you need to install the python-scrypt package as well and move the deb package for it to the offline computer.
+
 Other improvements that need to be made:
 - The secret key format is not checked in the input. It MUST be checked to make sure that it was written down correctly. I tried to sign with the first 2 keys and the last 2 keys separately when I was verifying that the secret keys were written down correctly.
