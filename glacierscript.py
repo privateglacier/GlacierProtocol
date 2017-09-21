@@ -557,7 +557,7 @@ def entropy(n, length):
 #
 ################################################################################################
 
-def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphrase=""):
+def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphrase=None):
     """
     Generate data for a new cold storage address (private keys, address, redemption script)
     m: <int> number of multisig keys required for withdrawal
@@ -622,23 +622,6 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphras
     redeemScript = results["redeemScript"]
     print "{}".format(redeemScript)
 
-    print "Create entropy for redeem key splitting"
-    dice_seed_string = read_dice_seed_interactive(dice_seed_length)
-
-
-    redeem_hex_random = binascii.hexlify(hashlib.pbkdf2_hmac('sha512', dice_seed_string, redeemScript, 10000, len(redeemScript)*m))
-    # Split to 1024 bit parts
-    for i in xrange((len(redeemScript)+255)/256):
-      redeem_hex_random_local = redeem_hex_random[(i*256*m) : ((i+1)*256*m)]
-      redeem_script_local = redeemScript[i*256 : ((i+1)*256)]
-      print "Redemption script piece {}: {}".format(i, redeem_script_local)
-      ssss_results = subprocess.check_output(
-	"echo '{2}' | ./ssss/ssss-split -t {0} -n {1} -x -r {3} -w part{4}".format(
-          m, n, redeem_script_local, redeem_hex_random_local, i), shell=True)
-      print "\nSSSS of Redemption script part {}:".format(i)
-      print "{}\n".format(ssss_results)
-    
-
     write_and_verify_qr_code("cold storage address", "address.png", results["address"])
     write_and_verify_qr_code("redemption script", "redemption.png",
                        results["redeemScript"])
@@ -650,7 +633,7 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphras
 #
 ################################################################################################
 
-def withdraw_interactive(passphrase=""):
+def withdraw_interactive(passphrase=None):
     """
     Construct and sign a transaction to withdaw funds from cold storage
     All data required for transaction construction is input at the terminal
@@ -824,7 +807,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-n", type=int, help="Number of total keys required in an m-of-n multisig address creation (default m-of-n = 1-of-2)", default=2)
     parser.add_argument(
-        "-p", "--passphrase", type=str, help="Passphrase", default="")
+        "-p", "--passphrase", type=str, help="Passphrase")
     args = parser.parse_args()
 
     if args.program == "entropy":
