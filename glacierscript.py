@@ -592,7 +592,7 @@ def deposit_interactive(m, n, dice_seed_length=62, rng_seed_length=20, passphras
         orig_keys.append(WIF_private_key)
         transformed_WIF_private_key = WIF_private_key
         if passphrase:
-	  transformed_WIF_private_key = hex_private_key_to_WIF_private_key(strongpkdf(WIF_private_key, passphrase))
+          transformed_WIF_private_key = hex_private_key_to_WIF_private_key(strongpkdf(WIF_private_key, passphrase))
         keys.append(transformed_WIF_private_key)
 
     print "Private keys created."
